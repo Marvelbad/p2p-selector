@@ -62,12 +62,97 @@
 - `sbp` — СБП по номеру телефона, в ответе приходит `phone`
 - `bank_transfer` — по номеру счёта, в ответе приходит `account_number`
 
-### Статусы платежа
+### Поля запроса POST `/p2p-selector/sale`
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `payment_type` | string | `card` / `sbp` / `bank_transfer` |
+| `amount` | string | Сумма платежа |
+| `currency` | string | Валюта (например `RUB`) |
+| `customer` | string | ID клиента в системе партнёра |
+| `order` | string | Номер заказа в системе партнёра |
+| `description` | string | Описание заказа |
+| `language` | string | Язык (например `ru`) |
+| `merchant_id` | string | ID мерчанта (выдаётся при регистрации) |
+| `endpoint_id` | string | ID эндпоинта (выдаётся при регистрации) |
+| `email` | string | Email плательщика |
+| `notification_url` | string | URL для уведомлений об оплате |
+| `signature` | string | Подпись HS256 |
+
+### Структура ответа `/sale` — объект `beneficiary`
+
+```json
+{
+  "status": "success",
+  "invoice_id": "...",
+  "beneficiary": {
+    "pan": "4111 1111 1111 1111",  // заполнен для card, null для остальных
+    "name": "SOME NAME",
+    "bank_name": "SOME BANK",
+    "phone": "+71111111111",         // заполнен для sbp, null для остальных
+    "account_number": "0123...9",    // заполнен для bank_transfer, null для остальных
+    "country_code": null,
+    "country_name": null,
+    "country_phone_code": null
+  }
+}
+```
+
+### Поля запроса POST `/p2p-selector/cancel`
+
+| Поле | Описание |
+|------|----------|
+| `merchant_id` | ID мерчанта |
+| `endpoint_id` | ID эндпоинта |
+| `invoice_id` | Наш ID платежа (из ответа `/sale`) |
+| `signature` | Подпись HS256 |
+
+Ответ: `{"status": "success"}`
+
+### Поля запроса GET `/status` (query string)
+
+| Параметр | Описание |
+|----------|----------|
+| `merchant_id` | ID мерчанта |
+| `endpoint_id` | ID эндпоинта |
+| `order` | Номер заказа в системе партнёра |
+| `signature` | Подпись HS256 |
+
+Пример: `GET /status?merchant_id=...&endpoint_id=...&order=...&signature=...`
+
+### Структура ответа `/status`
+
+```json
+{
+  "status": "success",
+  "payment_status": "complete",
+  "id": "...",
+  "order": "test-order01",
+  "price": "100.0000",
+  "amount_paid": "100.0000",
+  "currency": "RUB"
+}
+```
+
+При `payment_status: "failed"` добавляются поля:
+- `last_payment_error_code` — код ошибки
+- `last_payment_error` — описание ошибки
+
+### Статусы платежа (`payment_status`)
 - `new` — платёж создан
 - `pending` — в обработке
 - `complete` — успех
 - `partial_complete` — частичная оплата (при P2P)
-- `failed` — неуспех
+- `failed` — неуспех (см. `last_payment_error_code` и `last_payment_error`)
+
+### Тестовые статусы (зависят от `amount`)
+
+| Диапазон `amount` | Статус |
+|-------------------|--------|
+| ≤ 100 | `failed` |
+| 100 – 500 | `partial_complete` |
+| 500 – 1000 | `pending` |
+| > 1000 | `complete` |
 
 ## Подпись запросов
 
@@ -80,11 +165,14 @@ ASCII(BASE64URL(UTF8(JWS Protected Header)) || '.' || BASE64URL(JWS Payload))
 ```
 
 JWS Header: `{"alg":"HS256"}`
-JWS Payload: `{"PATH": "<path>", "POST": {<отсортированные поля>}}`
+JWS Payload:
+- для POST: `{"PATH": "<path>", "POST": {<отсортированные поля>}}`
+- для GET: `{"PATH": "<path>", "GET": {<отсортированные query-параметры>}}`
 
 Правила:
 - Ключи сортируются в алфавитном порядке
 - Все значения — строки
+- Кириллица в значениях — энкодить в UTF-8
 - BASE64URL (не BASE64): убрать `=`, заменить `+`→`-`, `/`→`_`
 
 Библиотека для Java: `com.auth0:java-jwt`
@@ -116,6 +204,7 @@ exception/GlobalExceptionHandler.java
 - **Деньги:** `BigDecimal`, не `double`
 - **Дата/время:** `LocalDateTime` (java.time)
 - **Ответы:** `@JsonInclude(NON_NULL)` — null-поля не попадают в JSON
+- **Спека — источник истины:** названия полей в DTO, запросах и ответах должны **строго соответствовать** `P2P_Selector_API_Spec.md`. Никаких переименований, camelCase-адаптаций или "улучшений" без явного указания.
 
 ## Принципы разработки
 
@@ -149,7 +238,7 @@ DB_PASSWORD=...
 
 ## Важно
 
-- Спека API: `P2P_Selector(sbp,card,account).pdf` — запросить у руководства
+- Спека API: `P2P_Selector_API_Spec.md` — файл лежит в корне проекта
 - Если платёж не будет произведён — **обязательно отменять** через `/cancel`, иначе упрёмся в лимиты
 - `customer` — это ID пользователя в системе партнёра, не в нашей
 - `invoice_id` — наш внутренний ID, возвращаем в ответе `/sale`, нужен для `/cancel` и `/status`
