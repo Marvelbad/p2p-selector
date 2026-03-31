@@ -45,9 +45,11 @@
 - Gradle Kotlin DSL (`build.gradle.kts`)
 - PostgreSQL — своя таблица статусов/логов операций
 - Spring Data JPA (для PostgreSQL)
-- Oracle (АБС Вити) — хранимые процедуры через SimpleJdbcCall (детали уточняются)
+- Oracle (АБС Вити) — хранимые процедуры через JdbcTemplate (детали уточняются)
 - Lombok, SpringDoc/Swagger
 - Jakarta Validation
+- `com.auth0:java-jwt:4.5.1` — верификация подписей HS256
+- `io.micrometer:micrometer-registry-prometheus` — экспорт метрик для Prometheus/Grafana
 
 ## API эндпоинты (по спеке P2P Selector)
 
@@ -177,22 +179,48 @@ JWS Payload:
 
 Библиотека для Java: `com.auth0:java-jwt`
 
-## Структура проекта (планируемая)
+## Структура проекта
 
 ```
-controller/P2pController.java           — эндпоинты /sale, /cancel, /status
-controller/api/P2pApi.java              — интерфейс со Swagger аннотациями
-service/P2pService.java                 — бизнес-логика
-repository/P2pRepository.java           — вызовы Oracle через SimpleJdbcCall
-repository/PaymentRepository.java       — JPA репозиторий (PostgreSQL)
-entity/Payment.java                     — JPA Entity
-config/                                 — конфигурация datasource (если нужна Oracle)
-dto/request/SaleRequest.java
-dto/request/CancelRequest.java
-dto/request/StatusRequest.java
-dto/response/SaleResponse.java
-dto/response/StatusResponse.java
-exception/GlobalExceptionHandler.java
+src/main/java/com/cibit/p2p/selector/
+├── P2pSelectorApplication.java                        ✅
+├── config/
+│   ├── OracleDataSourceConfig.java                    ✅ (@Primary, JdbcTemplate)
+│   └── PostgresDataSourceConfig.java                  ✅ (JPA, @EnableJpaRepositories)
+├── controller/
+│   ├── P2pController.java                             ✅ (/sale, /cancel, /status, /health)
+│   └── api/P2pApi.java                                ⏳ Swagger интерфейс
+├── service/
+│   └── P2pService.java                                ✅
+├── repository/
+│   ├── P2pRepository.java                             ⏳ заглушка (ждём контракт Oracle от Вити)
+│   └── PaymentRepository.java                         ✅ (JPA)
+├── entity/
+│   └── Payment.java                                   ✅
+├── enums/
+│   └── PaymentStatus.java                             ✅
+├── security/
+│   └── SignatureService.java                          ✅ (верификация HS256)
+├── dto/
+│   ├── request/
+│   │   ├── SaleRequest.java                           ✅
+│   │   ├── CancelRequest.java                         ✅
+│   │   └── StatusRequest.java                         ✅
+│   └── response/
+│       ├── SaleResponse.java                          ✅
+│       ├── CancelResponse.java                        ✅
+│       ├── StatusResponse.java                        ✅
+│       └── Beneficiary.java                           ✅
+└── exception/
+    ├── GlobalExceptionHandler.java                    ✅
+    ├── InvalidSignatureException.java                 ✅
+    └── PaymentNotFoundException.java                  ✅
+
+src/main/resources/
+├── application.yaml                                   ✅
+├── application-local.yaml                             ✅ (в .gitignore)
+└── db/migration/migration/
+    └── V1__create_payments_table.sql                  ✅ (выполнить вручную в PostgreSQL)
 ```
 
 ## Конвенции кода
@@ -217,7 +245,8 @@ exception/GlobalExceptionHandler.java
 
 ```bash
 # PostgreSQL (своя таблица операций)
-POSTGRES_URL=jdbc:postgresql://host:5432/p2p
+# Порт 5433 на сервере — чтобы не конфликтовать с gateway-postgres (5432)
+POSTGRES_URL=jdbc:postgresql://host:5433/p2p
 POSTGRES_USERNAME=postgres
 POSTGRES_PASSWORD=...
 
@@ -227,14 +256,17 @@ DB_USERNAME=...
 DB_PASSWORD=...
 ```
 
+> `gateway-postgres` занимает порт `5432` на сервере. Контейнер `p2p-postgres` будет на `5433`.
+
 ## Что сейчас TODO
 
-- Уточнить у Вити контракт хранимых процедур для проверки клиента
-- Уточнить схему локальной БД (синхронизация с Oracle или отдельная)
-- Реализовать верификацию подписи HS256 входящих запросов
-- Реализовать генерацию подписи HS256 для исходящих ответов
-- Детали взаимодействия с Монетой/СБП — уточнить у руководства
-- Добавить мониторинг (Prometheus + Grafana) — по образцу gateway
+- ✅ Реализовать верификацию подписи HS256 входящих запросов
+- ✅ PostgreSQL — своя таблица `payments` (статусы, логи операций)
+- ⏳ Уточнить у Вити контракт хранимых процедур Oracle — заполнить `P2pRepository`
+- ⏳ Swagger аннотации — `controller/api/P2pApi.java`
+- ⏳ Docker Compose — `p2p-app` + `p2p-postgres` (порт 5433)
+- ⏳ Добавить p2p-selector в `prometheus.yml` gateway (scrape на порт 8081)
+- ⏳ Детали взаимодействия с Монетой/СБП — уточнить у руководства
 
 ## Важно
 
