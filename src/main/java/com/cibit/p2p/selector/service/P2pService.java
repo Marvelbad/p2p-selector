@@ -17,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.TreeMap;
@@ -67,7 +68,12 @@ public class P2pService {
         payment.setPaymentType(request.getPayment_type());
         payment.setAmount(request.getAmount());
         payment.setCurrency(request.getCurrency());
-        payment.setStatus(PaymentStatus.NEW);
+        PaymentStatus status = resolveStatus(request.getAmount());
+        payment.setStatus(status);
+        if (status == PaymentStatus.FAILED) {
+            payment.setErrorCode("AMOUNT_TOO_LOW");
+            payment.setErrorMessage("Сумма платежа слишком мала");
+        }
         payment.setCreatedAt(LocalDateTime.now());
         paymentRepository.save(payment);
 
@@ -107,6 +113,26 @@ public class P2pService {
         paymentRepository.save(payment);
 
         return new CancelResponse("success");
+    }
+
+    /**
+     * Тестовый статус платежа на основе суммы (по спеке P2P Selector).
+     * Используется пока не подключён Oracle.
+     * ≤ 100          → failed
+     * 100 – 500      → partial_complete
+     * 500 – 1000     → pending
+     * > 1000         → complete
+     */
+    private PaymentStatus resolveStatus(BigDecimal amount) {
+        if (amount.compareTo(BigDecimal.valueOf(100)) <= 0) {
+            return PaymentStatus.FAILED;
+        } else if (amount.compareTo(BigDecimal.valueOf(500)) <= 0) {
+            return PaymentStatus.PARTIAL_COMPLETE;
+        } else if (amount.compareTo(BigDecimal.valueOf(1000)) <= 0) {
+            return PaymentStatus.PENDING;
+        } else {
+            return PaymentStatus.COMPLETE;
+        }
     }
 
     public StatusResponse status(StatusRequest request) {
