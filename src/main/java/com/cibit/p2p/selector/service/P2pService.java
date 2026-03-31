@@ -1,0 +1,141 @@
+package com.cibit.p2p.selector.service;
+
+import com.cibit.p2p.selector.dto.request.CancelRequest;
+import com.cibit.p2p.selector.dto.request.SaleRequest;
+import com.cibit.p2p.selector.dto.request.StatusRequest;
+import com.cibit.p2p.selector.dto.response.CancelResponse;
+import com.cibit.p2p.selector.dto.response.SaleResponse;
+import com.cibit.p2p.selector.dto.response.StatusResponse;
+import com.cibit.p2p.selector.entity.Payment;
+import com.cibit.p2p.selector.enums.PaymentStatus;
+import com.cibit.p2p.selector.exception.InvalidSignatureException;
+import com.cibit.p2p.selector.exception.PaymentNotFoundException;
+import com.cibit.p2p.selector.repository.P2pRepository;
+import com.cibit.p2p.selector.repository.PaymentRepository;
+import com.cibit.p2p.selector.security.SignatureService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.UUID;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class P2pService {
+
+    private final PaymentRepository paymentRepository;
+    private final P2pRepository p2pRepository;
+    private final SignatureService signatureService;
+
+    public SaleResponse sale(SaleRequest request) {
+        log.info("[SALE] merchant={} order={} type={} amount={}",
+                request.getMerchant_id(), request.getOrder(),
+                request.getPayment_type(), request.getAmount());
+
+        // Верификация подписи
+        Map<String, String> fields = new TreeMap<>();
+        fields.put("amount", request.getAmount().toPlainString());
+        fields.put("currency", request.getCurrency());
+        fields.put("customer", request.getCustomer());
+        fields.put("description", request.getDescription() != null ? request.getDescription() : "");
+        fields.put("email", request.getEmail() != null ? request.getEmail() : "");
+        fields.put("endpoint_id", request.getEndpoint_id());
+        fields.put("language", request.getLanguage() != null ? request.getLanguage() : "");
+        fields.put("merchant_id", request.getMerchant_id());
+        fields.put("notification_url", request.getNotification_url() != null ? request.getNotification_url() : "");
+        fields.put("order", request.getOrder());
+        fields.put("payment_type", request.getPayment_type());
+
+        if (!signatureService.verifyPost("/p2p-selector/sale", fields, request.getSignature())) {
+            throw new InvalidSignatureException();
+        }
+
+        // Генерируем invoice_id
+        String invoiceId = UUID.randomUUID().toString();
+
+        // Сохраняем платёж в PostgreSQL
+        Payment payment = new Payment();
+        payment.setInvoiceId(invoiceId);
+        payment.setMerchantId(request.getMerchant_id());
+        payment.setEndpointId(request.getEndpoint_id());
+        payment.setOrderNumber(request.getOrder());
+        payment.setCustomer(request.getCustomer());
+        payment.setPaymentType(request.getPayment_type());
+        payment.setAmount(request.getAmount());
+        payment.setCurrency(request.getCurrency());
+        payment.setStatus(PaymentStatus.NEW);
+        payment.setCreatedAt(LocalDateTime.now());
+        paymentRepository.save(payment);
+
+        // TODO: вызов Oracle для получения реквизитов получателя
+        // Beneficiary beneficiary = p2pRepository.getBeneficiary(request);
+
+        // Заглушка ответа до получения контракта Oracle
+        SaleResponse response = new SaleResponse();
+        response.setStatus("success");
+        response.setInvoice_id(invoiceId);
+        return response;
+    }
+
+    public CancelResponse cancel(CancelRequest request) {
+        log.info("[CANCEL] merchant={} invoice_id={}",
+                request.getMerchant_id(), request.getInvoice_id());
+
+        // Верификация подписи
+        Map<String, String> fields = new TreeMap<>();
+        fields.put("endpoint_id", request.getEndpoint_id());
+        fields.put("invoice_id", request.getInvoice_id());
+        fields.put("merchant_id", request.getMerchant_id());
+
+        if (!signatureService.verifyPost("/p2p-selector/cancel", fields, request.getSignature())) {
+            throw new InvalidSignatureException();
+        }
+
+        // Ищем платёж
+        Payment payment = paymentRepository.findByInvoiceId(request.getInvoice_id())
+                .orElseThrow(() -> new PaymentNotFoundException(request.getInvoice_id()));
+
+        // Обновляем статус
+        payment.setStatus(PaymentStatus.FAILED);
+        payment.setUpdatedAt(LocalDateTime.now());
+        paymentRepository.save(payment);
+
+        return new CancelResponse("success");
+    }
+
+    public StatusResponse status(StatusRequest request) {
+        log.info("[STATUS] merchant={} order={}",
+                request.getMerchant_id(), request.getOrder());
+
+        // Верификация подписи
+        Map<String, String> params = new TreeMap<>();
+        params.put("endpoint_id", request.getEndpoint_id());
+        params.put("merchant_id", request.getMerchant_id());
+        params.put("order", request.getOrder());
+
+        if (!signatureService.verifyGet("/status", params, request.getSignature())) {
+            throw new InvalidSignatureException();
+        }
+
+        // Ищем платёж
+        Payment payment = paymentRepository
+                .findByMerchantIdAndOrderNumber(request.getMerchant_id(), request.getOrder())
+                .orElseThrow(() -> new PaymentNotFoundException(request.getOrder()));
+
+        // Формируем ответ
+        StatusResponse response = new StatusResponse();
+        response.setStatus("success");
+        response.setPayment_status(payment.getStatus().name().toLowerCase());
+        response.setId(payment.getInvoiceId());
+        response.setOrder(payment.getOrderNumber());
+        response.setPrice(payment.getAmount());
+        response.setAmount_paid(payment.getAmount());
+        response.setCurrency(payment.getCurrency());
+
+        return response;
+    }
+}
