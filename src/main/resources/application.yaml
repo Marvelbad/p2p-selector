@@ -1,3 +1,82 @@
 spring:
   application:
     name: p2p-selector
+
+  # Глобально убираем null-поля из всех JSON-ответов
+  jackson:
+    default-property-inclusion: non_null
+
+  datasource:
+    # Oracle — АБС Кибита (хранимые процедуры через JdbcTemplate)
+    oracle:
+      url: ${DB_URL:}
+      username: ${DB_USERNAME:}
+      password: ${DB_PASSWORD:}
+      driver-class-name: ${DB_DRIVER:oracle.jdbc.OracleDriver}
+      hikari:
+        maximum-pool-size: 10
+        minimum-idle: 2
+        connection-timeout: 30000
+        idle-timeout: 600000
+        max-lifetime: 1800000
+        # Таймаут сокета — защита от зависания если Oracle не отвечает на уровне сети
+        data-source-properties:
+          oracle.jdbc.ReadTimeout: 30000
+
+    # PostgreSQL — своя таблица операций (статусы, логи)
+    postgres:
+      url: ${POSTGRES_URL:jdbc:postgresql://localhost:5432/p2p}
+      username: ${POSTGRES_USERNAME:postgres}
+      password: ${POSTGRES_PASSWORD:postgres}
+      driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+# =============================
+# НАСТРОЙКИ СЕРВЕРА
+# =============================
+server:
+  port: ${SERVER_PORT:8081}
+
+# =============================
+# НАСТРОЙКИ ЛОГИРОВАНИЯ
+# =============================
+logging:
+  level:
+    com.cibit.p2p.selector: DEBUG
+    org.springframework.web: INFO
+  pattern:
+    console: "%d{HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# =============================
+# МОНИТОРИНГ
+# =============================
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      # Гистограммы для p95/p99 времени ответа в Grafana
+      percentiles-histogram:
+        http.server.requests: true
+
+# =============================
+# P2P SELECTOR
+# =============================
+# Секретный ключ HS256 для верификации входящих подписей
+p2p:
+  secret: ${P2P_SECRET:test}
