@@ -99,8 +99,10 @@ public class P2pService {
         Payment payment = paymentRepository.findByInvoiceId(request.getInvoice_id())
                 .orElseThrow(() -> new PaymentNotFoundException(request.getInvoice_id()));
 
-        // Обновляем статус
+        // Обновляем статус и фиксируем причину отмены
         payment.setStatus(PaymentStatus.FAILED);
+        payment.setErrorCode("CANCELLED");
+        payment.setErrorMessage("Платёж отменён");
         payment.setUpdatedAt(LocalDateTime.now());
         paymentRepository.save(payment);
 
@@ -135,6 +137,12 @@ public class P2pService {
         response.setPrice(payment.getAmount());
         response.setAmount_paid(payment.getAmount());
         response.setCurrency(payment.getCurrency());
+
+        // При failed — добавляем поля ошибки (требование спеки)
+        if (payment.getStatus() == PaymentStatus.FAILED) {
+            response.setLast_payment_error_code(payment.getErrorCode());
+            response.setLast_payment_error(payment.getErrorMessage());
+        }
 
         return response;
     }

@@ -21,16 +21,23 @@ public class P2pController {
 
     @PostMapping("/p2p-selector/sale")
     public SaleResponse sale(@Valid @RequestBody SaleRequest request) {
+        log.info("[SALE] merchant={} order={} type={} amount={}",
+                request.getMerchant_id(), request.getOrder(),
+                request.getPayment_type(), request.getAmount());
         return p2pService.sale(request);
     }
 
     @PostMapping("/p2p-selector/cancel")
     public CancelResponse cancel(@Valid @RequestBody CancelRequest request) {
+        log.info("[CANCEL] merchant={} invoice_id={}",
+                request.getMerchant_id(), request.getInvoice_id());
         return p2pService.cancel(request);
     }
 
     @GetMapping("/status")
     public StatusResponse status(@Valid @ModelAttribute StatusRequest request) {
+        log.info("[STATUS] merchant={} order={}",
+                request.getMerchant_id(), request.getOrder());
         return p2pService.status(request);
     }
 
