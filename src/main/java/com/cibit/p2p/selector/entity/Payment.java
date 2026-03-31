@@ -64,4 +64,12 @@ public class Payment {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    // Код ошибки при статусе FAILED
+    @Column(name = "error_code")
+    private String errorCode;
+
+    // Описание ошибки при статусе FAILED
+    @Column(name = "error_message")
+    private String errorMessage;
+
 }
