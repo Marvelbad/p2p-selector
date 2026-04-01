@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.Optional;
 import java.util.TreeMap;
 import java.util.UUID;
 
@@ -48,6 +49,18 @@ public class P2pService {
 
         if (!signatureService.verifyPost("/p2p-selector/sale", fields, request.getSignature())) {
             throw new InvalidSignatureException();
+        }
+
+        // Идемпотентность — если такой заказ уже существует, возвращаем его
+        Optional<Payment> existing = paymentRepository
+                .findByMerchantIdAndOrderNumber(request.getMerchant_id(), request.getOrder());
+        if (existing.isPresent()) {
+            Payment p = existing.get();
+            SaleResponse idempotentResponse = new SaleResponse();
+            idempotentResponse.setStatus("success");
+            idempotentResponse.setInvoice_id(p.getInvoiceId());
+            idempotentResponse.setBeneficiary(buildStubBeneficiary(p.getPaymentType()));
+            return idempotentResponse;
         }
 
         // Генерируем invoice_id
