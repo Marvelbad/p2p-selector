@@ -3,6 +3,7 @@ package com.cibit.p2p.selector.service;
 import com.cibit.p2p.selector.dto.request.CancelRequest;
 import com.cibit.p2p.selector.dto.request.SaleRequest;
 import com.cibit.p2p.selector.dto.request.StatusRequest;
+import com.cibit.p2p.selector.dto.response.Beneficiary;
 import com.cibit.p2p.selector.dto.response.CancelResponse;
 import com.cibit.p2p.selector.dto.response.SaleResponse;
 import com.cibit.p2p.selector.dto.response.StatusResponse;
@@ -71,13 +72,14 @@ public class P2pService {
         payment.setCreatedAt(LocalDateTime.now());
         paymentRepository.save(payment);
 
-        // TODO: вызов Oracle для получения реквизитов получателя
+        // TODO: заменить на вызов Oracle когда придёт контракт от Вити
         // Beneficiary beneficiary = p2pRepository.getBeneficiary(request);
+        Beneficiary beneficiary = buildStubBeneficiary(request.getPayment_type());
 
-        // Заглушка ответа до получения контракта Oracle
         SaleResponse response = new SaleResponse();
         response.setStatus("success");
         response.setInvoice_id(invoiceId);
+        response.setBeneficiary(beneficiary);
         return response;
     }
 
@@ -114,6 +116,22 @@ public class P2pService {
      * 500 – 1000     → pending
      * > 1000         → complete
      */
+    /**
+     * Тестовая заглушка реквизитов получателя.
+     * Заменить на вызов Oracle когда придёт контракт от Вити.
+     */
+    private Beneficiary buildStubBeneficiary(String paymentType) {
+        Beneficiary b = new Beneficiary();
+        b.setName("SOME NAME");
+        b.setBank_name("SOME BANK");
+        switch (paymentType) {
+            case "card" -> b.setPan("4111 1111 1111 1111");
+            case "sbp" -> b.setPhone("+71111111111");
+            case "bank_transfer" -> b.setAccount_number("40817810099910004312");
+        }
+        return b;
+    }
+
     private PaymentStatus resolveStatus(BigDecimal amount) {
         if (amount.compareTo(BigDecimal.valueOf(100)) <= 0) {
             return PaymentStatus.FAILED;
