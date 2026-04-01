@@ -72,4 +72,8 @@ public class Payment {
     @Column(name = "error_message")
     private String errorMessage;
 
+    // Полный JSON ответа /sale — для идемпотентности и кэша
+    @Column(name = "sale_response_json", columnDefinition = "TEXT")
+    private String saleResponseJson;
+
 }

@@ -14,7 +14,9 @@ import com.cibit.p2p.selector.exception.PaymentNotFoundException;
 import com.cibit.p2p.selector.repository.P2pRepository;
 import com.cibit.p2p.selector.repository.PaymentRepository;
 import com.cibit.p2p.selector.security.SignatureService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -24,6 +26,7 @@ import java.util.Optional;
 import java.util.TreeMap;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class P2pService {
@@ -31,6 +34,7 @@ public class P2pService {
     private final PaymentRepository paymentRepository;
     private final P2pRepository p2pRepository;
     private final SignatureService signatureService;
+    private final ObjectMapper objectMapper;
 
     public SaleResponse sale(SaleRequest request) {
         // Верификация подписи — опциональные поля включаются только если переданы
@@ -51,16 +55,20 @@ public class P2pService {
             throw new InvalidSignatureException();
         }
 
-        // Идемпотентность — если такой заказ уже существует, возвращаем его
+        // Идемпотентность — если такой заказ уже существует, возвращаем сохранённый JSON
         Optional<Payment> existing = paymentRepository
                 .findByMerchantIdAndOrderNumber(request.getMerchant_id(), request.getOrder());
         if (existing.isPresent()) {
             Payment p = existing.get();
-            SaleResponse idempotentResponse = new SaleResponse();
-            idempotentResponse.setStatus("success");
-            idempotentResponse.setInvoice_id(p.getInvoiceId());
-            idempotentResponse.setBeneficiary(buildStubBeneficiary(p.getPaymentType()));
-            return idempotentResponse;
+            if (p.getSaleResponseJson() != null) {
+                try {
+                    log.info("[SALE] Дубликат merchant={} order={}, возвращаем сохранённый ответ",
+                            request.getMerchant_id(), request.getOrder());
+                    return objectMapper.readValue(p.getSaleResponseJson(), SaleResponse.class);
+                } catch (Exception e) {
+                    log.warn("[SALE] Ошибка десериализации сохранённого ответа: {}", e.getMessage());
+                }
+            }
         }
 
         // Генерируем invoice_id
@@ -93,6 +101,15 @@ public class P2pService {
         response.setStatus("success");
         response.setInvoice_id(invoiceId);
         response.setBeneficiary(beneficiary);
+
+        // Сохраняем полный JSON ответа для идемпотентности
+        try {
+            payment.setSaleResponseJson(objectMapper.writeValueAsString(response));
+            paymentRepository.save(payment);
+        } catch (Exception e) {
+            log.warn("[SALE] Ошибка сохранения JSON ответа: {}", e.getMessage());
+        }
+
         return response;
     }
 

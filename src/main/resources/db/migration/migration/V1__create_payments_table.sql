@@ -10,8 +10,9 @@ CREATE TABLE payments
     amount       NUMERIC(18, 4) NOT NULL,
     currency     VARCHAR(10)  NOT NULL,
     status       VARCHAR(50)  NOT NULL,
-    error_code   VARCHAR(255),
-    error_message TEXT,
-    created_at   TIMESTAMP    NOT NULL,
-    updated_at   TIMESTAMP
+    error_code          VARCHAR(255),
+    error_message       TEXT,
+    sale_response_json  TEXT,
+    created_at          TIMESTAMP    NOT NULL,
+    updated_at          TIMESTAMP
 );
