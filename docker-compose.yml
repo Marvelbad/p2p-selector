@@ -25,7 +25,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      POSTGRES_URL: jdbc:postgresql://postgres:5432/p2p
+      POSTGRES_URL: jdbc:postgresql://p2p-postgres:5432/p2p
       POSTGRES_USERNAME: ${POSTGRES_USERNAME}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       DB_URL: ${DB_URL}
@@ -34,6 +34,9 @@ services:
       P2P_SECRET: ${P2P_SECRET}
     ports:
       - "8081:8081"
+    networks:
+      - default
+      - gateway_network
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8081/health || exit 1"]
       interval: 30s
@@ -43,3 +46,10 @@ services:
 
 volumes:
   postgres_data:
+
+networks:
+  default:
+    name: p2p_default
+  gateway_network:
+    external: true
+    name: gateway_default

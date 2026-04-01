@@ -6,8 +6,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.math.BigDecimal;
-
 @Getter
 @Setter
 @NoArgsConstructor
@@ -29,10 +27,10 @@ public class StatusResponse {
     private String order;
 
     @Schema(description = "Запрошенная сумма платежа", example = "1500.0000")
-    private BigDecimal price;
+    private String price;
 
     @Schema(description = "Фактически оплаченная сумма", example = "1500.0000")
-    private BigDecimal amount_paid;
+    private String amount_paid;
 
     @Schema(description = "Валюта", example = "RUB")
     private String currency;
