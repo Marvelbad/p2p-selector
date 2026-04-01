@@ -14,7 +14,6 @@ import com.cibit.p2p.selector.repository.P2pRepository;
 import com.cibit.p2p.selector.repository.PaymentRepository;
 import com.cibit.p2p.selector.security.SignatureService;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -23,7 +22,6 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.UUID;
 
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class P2pService {
@@ -33,21 +31,17 @@ public class P2pService {
     private final SignatureService signatureService;
 
     public SaleResponse sale(SaleRequest request) {
-        log.info("[SALE] merchant={} order={} type={} amount={}",
-                request.getMerchant_id(), request.getOrder(),
-                request.getPayment_type(), request.getAmount());
-
-        // Верификация подписи
+        // Верификация подписи — опциональные поля включаются только если переданы
         Map<String, String> fields = new TreeMap<>();
         fields.put("amount", request.getAmount().toPlainString());
         fields.put("currency", request.getCurrency());
         fields.put("customer", request.getCustomer());
-        fields.put("description", request.getDescription() != null ? request.getDescription() : "");
-        fields.put("email", request.getEmail() != null ? request.getEmail() : "");
+        if (request.getDescription() != null) fields.put("description", request.getDescription());
+        if (request.getEmail() != null) fields.put("email", request.getEmail());
         fields.put("endpoint_id", request.getEndpoint_id());
-        fields.put("language", request.getLanguage() != null ? request.getLanguage() : "");
+        if (request.getLanguage() != null) fields.put("language", request.getLanguage());
         fields.put("merchant_id", request.getMerchant_id());
-        fields.put("notification_url", request.getNotification_url() != null ? request.getNotification_url() : "");
+        if (request.getNotification_url() != null) fields.put("notification_url", request.getNotification_url());
         fields.put("order", request.getOrder());
         fields.put("payment_type", request.getPayment_type());
 
@@ -88,9 +82,6 @@ public class P2pService {
     }
 
     public CancelResponse cancel(CancelRequest request) {
-        log.info("[CANCEL] merchant={} invoice_id={}",
-                request.getMerchant_id(), request.getInvoice_id());
-
         // Верификация подписи
         Map<String, String> fields = new TreeMap<>();
         fields.put("endpoint_id", request.getEndpoint_id());
@@ -136,9 +127,6 @@ public class P2pService {
     }
 
     public StatusResponse status(StatusRequest request) {
-        log.info("[STATUS] merchant={} order={}",
-                request.getMerchant_id(), request.getOrder());
-
         // Верификация подписи
         Map<String, String> params = new TreeMap<>();
         params.put("endpoint_id", request.getEndpoint_id());
@@ -160,14 +148,16 @@ public class P2pService {
         response.setPayment_status(payment.getStatus().name().toLowerCase());
         response.setId(payment.getInvoiceId());
         response.setOrder(payment.getOrderNumber());
-        response.setPrice(payment.getAmount());
-        response.setAmount_paid(payment.getAmount());
+        response.setPrice(payment.getAmount().toPlainString());
         response.setCurrency(payment.getCurrency());
 
-        // При failed — добавляем поля ошибки (требование спеки)
+        // При failed — amount_paid = 0, добавляем поля ошибки (требование спеки)
         if (payment.getStatus() == PaymentStatus.FAILED) {
+            response.setAmount_paid("0.0000");
             response.setLast_payment_error_code(payment.getErrorCode());
             response.setLast_payment_error(payment.getErrorMessage());
+        } else {
+            response.setAmount_paid(payment.getAmount().toPlainString());
         }
 
         return response;

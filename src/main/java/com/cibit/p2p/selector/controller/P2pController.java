@@ -46,6 +46,7 @@ public class P2pController implements P2pApi {
 
     @Override
     public String health() {
+        log.info("[HEALTH] сервис доступен");
         return "OK";
     }
 
