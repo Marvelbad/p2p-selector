@@ -58,6 +58,7 @@
 | POST | `/p2p-selector/sale` | Создание платежа (card / sbp / bank_transfer) |
 | POST | `/p2p-selector/cancel` | Отмена платежа |
 | GET | `/status` | Получение статуса платежа |
+| GET | `/health` | Проверка работоспособности сервиса |
 
 ### Типы платежа (`payment_type`)
 - `card` — перевод на карту, в ответе приходит `pan`
@@ -189,7 +190,7 @@ src/main/java/com/cibit/p2p/selector/
 │   └── PostgresDataSourceConfig.java                  ✅ (JPA, @EnableJpaRepositories)
 ├── controller/
 │   ├── P2pController.java                             ✅ (/sale, /cancel, /status, /health)
-│   └── api/P2pApi.java                                ⏳ Swagger интерфейс
+│   └── api/P2pApi.java                                ✅ (Swagger интерфейс)
 ├── service/
 │   └── P2pService.java                                ✅
 ├── repository/
@@ -221,6 +222,17 @@ src/main/resources/
 ├── application-local.yaml                             ✅ (в .gitignore)
 └── db/migration/migration/
     └── V1__create_payments_table.sql                  ✅ (выполнить вручную в PostgreSQL)
+
+src/test/java/com/cibit/p2p/selector/
+├── SignatureGeneratorTest.java                        ✅ (генератор подписей для Postman)
+├── security/
+│   └── SignatureServiceTest.java                      ✅ (6 тестов HS256)
+└── service/
+    └── P2pServiceTest.java                            ✅ (8 тестов resolveStatus)
+
+/ (корень проекта)
+├── Dockerfile                                         ✅ (eclipse-temurin:21-jre)
+└── docker-compose.yml                                 ✅ (p2p-app + p2p-postgres)
 ```
 
 ## Конвенции кода
@@ -256,17 +268,61 @@ DB_USERNAME=...
 DB_PASSWORD=...
 ```
 
-> `gateway-postgres` занимает порт `5432` на сервере. Контейнер `p2p-postgres` будет на `5433`.
+> `gateway-postgres` занимает порт `5432` на сервере. Контейнер `p2p-postgres` запущен на `5433`.
 
 ## Что сейчас TODO
 
 - ✅ Реализовать верификацию подписи HS256 входящих запросов
 - ✅ PostgreSQL — своя таблица `payments` (статусы, логи операций)
+- ✅ Swagger аннотации — `controller/api/P2pApi.java`
+- ✅ Docker Compose — `p2p-app` + `p2p-postgres` (порт 5433)
+- ✅ Добавить p2p-selector в `prometheus.yml` gateway (scrape на порт 8081)
 - ⏳ Уточнить у Вити контракт хранимых процедур Oracle — заполнить `P2pRepository`
-- ⏳ Swagger аннотации — `controller/api/P2pApi.java`
-- ⏳ Docker Compose — `p2p-app` + `p2p-postgres` (порт 5433)
-- ⏳ Добавить p2p-selector в `prometheus.yml` gateway (scrape на порт 8081)
+- ⏳ Grafana dashboard для p2p-selector + алерты
 - ⏳ Детали взаимодействия с Монетой/СБП — уточнить у руководства
+
+## Деплой
+
+Сервис задеплоен на сервере `10.222.179.27`.
+
+### Расположение файлов на сервере
+- Приложение: `/opt/p2p/`
+- JAR: `/opt/p2p/p2p-selector-0.0.1-SNAPSHOT.jar`
+- Docker Compose: `/opt/p2p/docker-compose.yml`
+- Переменные окружения: `/opt/p2p/.env`
+
+### Процесс деплоя
+```bash
+# 1. Собрать JAR локально
+./gradlew build -x test
+
+# 2. Скопировать JAR на сервер
+scp build/libs/p2p-selector-0.0.1-SNAPSHOT.jar user@10.222.179.27:/opt/p2p/
+
+# 3. На сервере — пересобрать и перезапустить
+cd /opt/p2p
+sudo docker-compose up -d --build
+```
+
+### Контейнеры
+| Контейнер | Порт | Описание |
+|-----------|------|----------|
+| p2p-app | 8081 | Spring Boot приложение |
+| p2p-postgres | 5433 | PostgreSQL база данных |
+
+Мониторинг: Prometheus scrape на `p2p-app:8081/actuator/prometheus` (через `gateway_network`).
+
+## Тестирование подписей (Postman)
+
+Для генерации HS256 подписей при ручном тестировании используй:
+`src/test/java/com/cibit/p2p/selector/SignatureGeneratorTest.java`
+
+Запусти нужный метод в IDEA, скопируй подпись из консоли:
+- `generateSaleSignature()` — для POST `/p2p-selector/sale`
+- `generateCancelSignature()` — для POST `/p2p-selector/cancel`
+- `generateStatusSignature()` — для GET `/status`
+
+Перед запуском обнови поля в методе (`order`, `invoice_id` и т.д.) под конкретный запрос.
 
 ## Важно
 
