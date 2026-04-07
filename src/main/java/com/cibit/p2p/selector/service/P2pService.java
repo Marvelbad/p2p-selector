@@ -18,6 +18,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -36,6 +37,7 @@ public class P2pService {
     private final SignatureService signatureService;
     private final ObjectMapper objectMapper;
 
+    @Transactional
     public SaleResponse sale(SaleRequest request) {
         // Верификация подписи — опциональные поля включаются только если переданы
         Map<String, String> fields = new TreeMap<>();
@@ -113,6 +115,7 @@ public class P2pService {
         return response;
     }
 
+    @Transactional
     public CancelResponse cancel(CancelRequest request) {
         // Верификация подписи
         Map<String, String> fields = new TreeMap<>();
@@ -174,6 +177,7 @@ public class P2pService {
         }
     }
 
+    @Transactional(readOnly = true)
     public StatusResponse status(StatusRequest request) {
         // Верификация подписи
         Map<String, String> params = new TreeMap<>();
