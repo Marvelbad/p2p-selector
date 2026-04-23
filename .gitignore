@@ -39,3 +39,7 @@ out/
 ### Секреты — не коммитить ###
 .env
 src/main/resources/application-local.yaml
+
+### Документы ВТБ — конфиденциально, не коммитить ###
+vtb_network_setup.md
+vtb_aes256_encryption.md
